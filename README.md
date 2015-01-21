@@ -3,7 +3,7 @@ Akka DI with Parfait and Scala
 
 Demonstrates how to do Akka Dependency Injection with the Parfait pattern and Scala.
 
-This template is based on the [akka-java-spring](https://github.com/typesafehub/activator-akka-java-spring) 
+This template is based on the [akka-scala-guice](https://github.com/rocketraman/activator-akka-scala-guice) 
 template.
 
 Setup
