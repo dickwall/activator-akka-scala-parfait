@@ -1,7 +1,7 @@
-Akka DI with Guice and Scala
-============================
+Akka DI with Parfait and Scala
+==============================
 
-Demonstrates how to do Akka Dependency Injection with Guice and Scala.
+Demonstrates how to do Akka Dependency Injection with the Parfait pattern and Scala.
 
 This template is based on the [akka-java-spring](https://github.com/typesafehub/activator-akka-java-spring) 
 template.

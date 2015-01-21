@@ -1,0 +1,458 @@
+<head>
+<title>Akka Dependency Injection with the Parfait Pattern</title>
+</head>
+<body>
+
+<div>
+<h2>Akka Dependency Injection using Parfait</h2>
+<p>
+The parfait pattern is, to some degree, a variation of the cake pattern
+but using implicits rather than traits to pass the configuration
+throughout an application. Rather than replacing Cake (which still
+offers some unique features), think of parfait as an alternative to
+solutions like Guice, but with many of the advantages of cake (such
+as complete compile time verifiability). In addition, the use of
+implicit parameters opens up some possibilities that even cake does
+not provide.
+</p>
+
+<p>
+  This template is based on the
+  <a href="https://github.com/rocketraman/activator-akka-scala-guice#master" target="_blank">akka-scala-guice</a>
+  template, which in turn is based on the
+  <a href="https://github.com/typesafehub/activator-akka-java-spring" target="_blank">akka-java-spring</a>
+  template. If you are familiar with Guice and/or Spring, comparing this template
+  with those may help you understand the conversion. Where modules have been
+  renamed, I have mentioned the old names in the comments.
+</p>
+<p>
+  Parfait is an arbitrary name (somewhat like cake) assigned because of the layered
+  nature of the configuration traits, and because a name is useful to refer to
+  an approach or pattern. This pattern is actually very open-ended and may be used
+  in multiple different ways to achieve the goal of configurable dependencies. One
+  such approach is demonstrated here, along with some warnings about possible pitfalls
+  and some examples of desirable features, particularly with respect to injecting
+  singleton objects (often hard in alternative dependency injection solutions).
+  However it is anticipated that this approach could be customized, tweaked or
+  otherwise improved on. The bones are here, flesh out the rest as you desire.
+</div>
+<div>
+<h2>Anatomy - Modules</h2>
+<p>
+  The core of Parfait is, like Cake, configuration module traits with abstract members.
+  Typically there are more than one of these modules within a large enough application
+  and they are purely virtual, but with one or more concrete implementations for each.
+</p>
+<p>
+  While we will dig into details later, for now within our example app you can take a
+  look at the three configuration modules, and their <em>standard</em> implementations.
+  <a href="#code/src/main/scala/config/ConfigModule.scala" class="shortcut">ConfigModule.scala</a>,
+  <a href="#code/src/main/scala/sample/AuditModule.scala" class="shortcut">AuditModule.scala</a> and
+  <a href="#code/src/main/scala/sample/CountingModule.scala" class="shortcut">CountingModule.scala</a>
+  are the three pure-virtual configuration modules in this sample app, and underneath them
+  you will see implementations that provide concrete values. Don't worry too much about the
+  implementations yet, as you may see some unfamiliar concepts in there but we will touch on
+  them later in the tutorial.
+<p>
+<!--<pre><code>
+filter(line => line.length > 3).
+</code></pre>-->
+
+</div>
+<div>
+<h2>Anatomy - Actors</h2>
+<p>
+  Our demonstration system uses akka actors, specifically those in the files:
+  <a href="#code/src/main/scala/sample/Audit.scala" class="shortcut">Audit.scala</a> and
+  <a href="#code/src/main/scala/sample/CountingActor.scala" class="shortcut">CountingActor.scala</a>.
+  These actors are written using common practices for akka, in particular defining
+  the <code>props</code> method in the companion object to the Actor class.
+</p>
+<p>
+  The <a href="#code/src/main/scala/sample/CountingActor.scala" class="shortcut">CountingActor</a>
+  uses <a href="#code/src/main/scala/sample/CountingService.scala" class="shortcut">CountingService</a>,
+  a utility class to increment a counter variable by a configured amount when called.
+</p>
+</div>
+<div>
+<h2>Anatomy - Main and Tests</h2>
+<p>
+  The <a href="#code/src/main/scala/Main.scala" class="shortcut">Main</a> class
+  used to run the application holds the code to set up the standard configuration
+  using the standard configuration modules. These are used to access countingActors
+  and send messages, after which we can retrieve the accumulated counts and show
+  their values. This represents an albeit simple system running in production mode.
+</p>
+<p>
+  The <a href="#code/src/test/scala/sample/CountingActorSpec.scala" class="shortcut">CountingActorSpec</a>
+  test shows the power of dependency injection, using overrides in the configuration
+  to substitute in alternative implementations of pieces of the system for testing
+  purposes. <a href="#code/src/test/scala/sample/TestCountingService.scala" class="shortcut">TestCountingService</a>
+  provides a <code>CountingService</code> implementation that lets us inspect the
+  number of times the counter was called to ensure that the actor code is doing
+  its job.
+</p>
+<p>Now you have the lay of the land, let's take a more detailed look at each of these
+  pieces in turn</p>
+</div>
+<div>
+<h2>Config Module</h2>
+<p>
+  The <a href="#code/src/main/scala/config/ConfigModule.scala" class="shortcut">ConfigModule</a>
+  provides a simple example of how configuration can be defined and then implemented for parfait.
+  The <code>ConfigModule</code> trait itself provides two members:
+  <pre><code>    def config: Config
+    def actorSystem: ActorSystem</pre></code>
+  these are pure abstract members, in other words they have a type but no supplied
+  implementation. We know that <code>config</code> will be of type
+  <code>com.typesafe.config.Config</code> and <code>actorSystem</code> will
+  be of type <code>akka.actor.ActorSystem</code>, and we know that implementations of
+  those types will be available in any concrete class extending <code>ConfigModule</code>
+  due to the rules of the Scala language, but nothing is implied about what that
+  implementation will be other than it will conform to those types.
+</p>
+<p>
+  The implementation in <code>AkkaConfigModule</code> provides one such set of
+  concrete definitions. In this case, the <code>config</code> holds the result of
+  the default <code>ConfigFactory.load()</code> invocation, while <code>actorSystem</code>
+  is set up to be a new <code>ActorSystem</code> with the name <code>"main-actor-system"</code>
+  and using the config we loaded by default.
+</p>
+<p>
+  When we want to use a standard configuration for our application with these values,
+  we can make items that need these dependencies specify a <code>ConfigModule</code>
+  must be supplied, but provide an <code>AkkaConfigModule</code> as the implementation
+  of that configuration. Alternatively, we could substitute in another implementation
+  in the case of wanting something non-standard. Any sub-type of <code>ConfigModule</code>
+  will satisfy that requirement.
+</p>
+<p>
+  One more thing to notice about the <code>AkkaConfigModule</code> is the use of
+  <code>lazy val</code>s. Although it should be safe in this specific case to use
+  a regular (or eager) val, generally in traits it is a better idea to use a
+  <code>lazy val</code> defensively for anything beyond a trivial assignment
+  of a constant. The reason is that traits initialize vals before the instance
+  they are being mixed into has been initialized (or indeed sometimes before
+  other traits within the same instance). If this happens, it is possible that
+  a value this val is relying on may not have been initialized yet, and this leads
+  to unexpected outcomes, including null pointer exceptions during initialization.
+</p>
+<p>
+  This tends to be more important when using dependency injection because configuration
+  traits tend to build up deeply and it can be difficult to keep track of
+  initialization ordering. The general rule of thumb is to use either <code>def</code>
+  or <code>lazy val</code> for any trait definition beyond a simple constant.
+  <code>def</code>s are evaluated each time they are used, whereas <code>lazy val</code>
+  is evaluated once on first use, then cached and that value used on all subsequence
+  calls.
+</p>
+</div>
+<div>
+<h2>Audit Module</h2>
+<p>
+  The Config Module just examined is used to read in the configuration and set up
+  the actor system. The
+  <a href="#code/src/main/scala/sample/AuditModule.scala" class="shortcut">AuditModule</a>
+  is a separate configuration module providing <code>auditCompanion</code> and
+  <code>auditBus</code> actor references. Again the <code>AuditModule</code>
+  is a pure abstract trait, and the <code>StandardAuditModule</code> provides
+  a standard set of definitions for these fields.
+</p>
+<p>
+  This time there is a twist however. In order to create the actor refs we need
+  the configuration, so we use a
+  <a href="http://debasishg.blogspot.com/2010/02/scala-self-type-annotations-for.html"
+    target="_blank">Self type</a> to make the <code>StandardAuditModule</code> dependent
+  on there being a <code>ConfigModule</code> present when used in a concrete instance.
+  The self type is specified by <code>this: ConfigModule =></code> in the trait
+  definition.
+</p>
+<p>
+  Since the <code>ConfigModule</code> must be present and implemented when
+  <code>StandardAuditModule</code> is used, we know we can use the <code>actorSystem</code>
+  defined within it to create our actor references.
+</p>
+<p>
+  The use of self types is comparable to the cake pattern, but in parfait it is only used
+  in the configuration module layer for requiring configuration dependencies there. For
+  injection into classes, and other functioning code a different mechanism is used: implicit parameters.
+</p>
+</div>
+<div>
+<h2>AuditBus and AuditCompanion</h2>
+<p>
+  To examine the use of implicit parameters to pass in configuration, let's jump into
+  <a href="#code/src/main/scala/sample/Audit.scala" class="shortcut">Audit.scala</a>.
+  The first class and companion in this file: <code>AuditBus</code> does not declare
+  or use any dependencies, it's a straight up simple Akka Actor. The <code>receive</code>
+  method in the Actor class receives <code>AuditBus.AuditEvent</code> messages and
+  logs them to stdout. Note also the <code>props</code> method in the companion:
+  <pre><code>    def props = Props(new AuditBus)</code></pre>
+  Putting the Props for an actor into the companion object is a common and recommended
+  way to provide the Props for a new actor ref.
+</p>
+<p>
+  Now let's take a look at
+  <a href="#code/src/main/scala/sample/Audit.scala" class="shortcut">AuditCompanion</a>
+  in the same file. This is also a simple Akka Actor, but this time it requires
+  some configuration be passed in. This is where parfait diverges from the cake
+  pattern.
+</p>
+<p>
+  The constructor for <code>AuditCompanion</code> requires that an <code>AuditModule</code>
+  configuration module is passed in. This is marked as <code>implicit</code>, meaning
+  that the compiler can search for and fill it in implicitly if it's not explicitly
+  provided, <b>and also</b> places it in implicit scope within the body of the
+  <code>AuditCompanion</code> class:
+
+  <pre><code>  class AuditCompanion(implicit auditModule: AuditModule) extends Actor</code></pre>
+
+  It is this combination of both things that
+  <code>implicit</code> enables that makes parfait work as it does, as we will see
+  shortly.
+</p>
+<p>
+  Because the <code>AuditModule</code> is available to the <code>AuditCompanion</code>,
+  configuration can be used from it:
+  <pre><code>  val auditBus = auditModule.auditBus</code></pre>
+</p>
+<p>
+  Finally the companion object for <code>AuditCompanion</code> still has a <code>props</code>
+  method, but since the <code>AuditCompanion</code> actor it creates needs the
+  <code>AuditConfig</code>, we pass it in to <code>props</code> as well:
+  <pre><code>  def props(implicit auditModule: AuditModule) =
+    Props(new AuditCompanion)</code></pre>
+  Because it is marked implicit in the parameter list, we don't have to specify
+  it when creating a new <code>AuditCompanion</code> because the compiler will
+  do that for us. This is one of the big advantages of parfait; while objects
+  usually cannot be injected because they are initialized before the DI frameworks
+  can get involved, with parfait you can simply pass implicit configuration into
+  the method instead if that makes more sense (like it does here).
+</p>
+</div>
+<div>
+<h2>CountingActor</h2>
+<p>
+  Let's take a look at
+  <a href="#code/src/main/scala/sample/CountingActor.scala" class="shortcut">CountingActor</a>.
+  This uses another module that we have not yet seen, but we'll take a look at that
+  in a minute.
+</p>
+<p>
+  Like <code>AuditCompanion</code>, <code>CountingActor</code> passes implicit configuration
+  through its <code>props</code> method to the Actor implementation. In this case
+  the configuration is <code>SystemModule</code> which as we will see is a combination
+  of the various configuration for the whole system (but could equally be a
+  combination of several configuration modules without needing to include every piece
+  of configuration). The Actor uses <code>auditCompanion</code> from
+  <code>AuditModule</code>, and also <code>countingService</code> from the
+  <code>CountingModule</code> (soon).
+</p>
+</div>
+<div>
+<h2>CountingModule and SystemModule</h2>
+<p>
+  This is where config starts to get interesting. It is common in larger applications
+  to combine individual configuration modules together into larger configuration modules
+  as you go further up the system heirarchy (and into code that uses subsystems
+  requiring different configuration modules).
+</p>
+<p>
+  First, let's see
+  <a href="#code/src/main/scala/sample/CountingModule.scala" class="shortcut">CountingModule</a>.
+  This, like the other modules we have seen, declares pure abstract members, in this
+  case:
+  <pre><code>    val countingActor: ActorRef
+    def countingService: CountingService</code></pre>
+  We are using a <code>val</code> for countingActor to require that the value never
+  change within a configuration module. Only vals (or lazy vals) may override it
+  now.
+</p>
+<p>
+  The <code>StandardCountingModule</code> trait relies on another trait, <code>SystemModule</code>
+  using self types again. This is where things start to get interesting though, if we take a look
+  at the definition for
+  <a href="#code/src/main/scala/sample/SystemModule.scala" class="shortcut">SystemModule</a>:
+  <pre><code>  trait SystemModule extends CountingModule
+    with AuditModule with ConfigModule</code></pre>
+  So, <code>SystemModule</code> combines the <code>CountingModule</code>,
+  <code>AuditModule</code> and <code>ConfigModule</code> configurations into one
+  super configuration that we can use instead of having to specify them each
+  separately each time.
+</p>
+</div>
+<div>
+<h2>Implicit Parameters and Sub-types</h2>
+<p>
+  Since <a href="#code/src/main/scala/sample/CountingModule.scala" class="shortcut">CountingModule</a>
+  specifies a self type of <code>SystemModule</code>, we know that we have <code>AuditModule</code>
+  and <code>ConfigModule</code> configuration available too, and we use that in the Actor:
+  <pre><code>  val auditCompanion = systemModule.auditCompanion</code></pre> and
+  <pre><code>    count = systemModule.countingService.increment(count)</code></pre>
+  for example.
+</p>
+<p>
+  Even more conveniently, since <code>SystemModule</code> is implicit in the class, if
+  we were to create a new instance of a class that requires one of the component
+  configurations, because <code>SystemModule</code> is a sub-type of those other
+  configurations, it will be found and used. E.g. if a new class:
+  <pre><code>  class Example(implicit configModule: ConfigModule)</code></pre>
+  is defined, we can still create a new one in <code>CountingActor</code>
+  with a simple
+  <pre><code>    new Example</code></pre> and it will work because Scala will fill
+  in the implicit <code>ConfigModule</code> using the implicit <code>SystemModule</code>
+  since it is a sub-type.
+</p>
+<p>This behavior, along with the chaining of implicit parameters, is the key to
+  the parfait pattern.</p>
+</div>
+<div>
+<h2>Providing the Configuration at Run Time</h2>
+<p>
+  Now that we have the configuration, and the pieces that rely on it, we need to bring
+  them together for a running system. This is usually done at the highest level
+  of your app (the <code>main</code> method typically) where you set up an aggregated
+  system configuration and pass it in to the first classes you create that need it (or
+  factory methods that use it). After that, the implicit configuration is handed
+  down to child classes automatically by Scala <em>but also may be replaced explicitly
+  at any level if desired</em> (another advantage of parfait).
+</p>
+<p>
+  Take a look at the
+  <a href="#code/src/main/scala/Main.scala" class="shortcut">Main</a> class. The
+  concrete configuration to be used is provided by this code:
+  <pre><code>  implicit val config: SystemModule =
+    new SystemModule with StandardCountingModule
+    with StandardAuditModule with AkkaConfigModule {}</code></pre>
+  which mixes together all of our standard implementations into a single implicit
+  configuration, then where we say <code>config.countingActor</code> we now
+  get a fully configured actor. Likewise if we wanted to create a new class that
+  took the configuration implicitly as a constructor parameter, we could do so
+  because that config instance is marked as implicit.
+</p>
+<p>
+  If a child class needs some configuration, but the parent class has "broken" the
+  implicit passing chain, you will get a compile error that tells you. Likewise, if
+  a subsystem requires configuration that the parent does not provide, you will
+  get a compile error for that as well. Scala will not let you fail to provide
+  a dependency using parfait resulting in a runtime error, although you can still
+  always write faulty code that gives back a null or some other runtime exception
+  (hint: don't do that :-) ).
+</p>
+<p>
+  Organizing the individual configuration traits into grouped traits is a good
+  idea because it means if you introduce a new configuration trait in the future, you
+  can add it into those grouped traits and avoid having to change lots of declarations
+  all over the code. Experience will give you a good idea of how best to organize
+  these grouped traits for the easiest code maintenance experience.
+</p>
+</div>
+<div>
+<h2>Testing with Parfait</h2>
+<p>
+  Of course, if we always use a standard configuration, dependency injection is
+  a bit pointless. The easy substitution of different, compile time verified,
+  implementations for the dependencies is the point. An example of this is during
+  testing where you might want to substitute in alternative implementations, e.g.
+  fakes, mocks and verifiers.
+</p>
+<p>
+  Our extensive :-) test suite for this project lives in
+  <a href="#code/src/test/scala/sample/CountingActorSpec.scala" class="shortcut">CountingActorSpec</a>
+  and makes use of
+  <a href="http://doc.akka.io/docs/akka/snapshot/scala/testing.html#Asynchronous_Integration_Testing_with_TestKit"
+  target="_blank">Akka's TestKit</a>, which allows a testing actor system to be configured
+  and used for testing purposes and gives extra introspection options allowing
+  actor traffic to be observed, etc.
+</p>
+<p>
+  By using the Akka TestKit we get a test scoped actor system to use under the field name
+  <code>_system</code>. To make use of this, plus a fake
+  <a href="#code/src/test/scala/sample/TestCountingService.scala">TestCountingService</a>
+  that lets us check how many times the counter was called, we define the implicit
+  configuration with the standard settings (just like in the <code>Main</code> runner)
+  but override a couple of values when we do so (see lines 28-29):
+  <pre><code>    override lazy val actorSystem: ActorSystem = _system
+    override lazy val countingService =
+      new TestCountingService()(this)</code></pre>
+  These overrides in our implicit configuration mean that the <code>_system</code>
+  test actor system, and <code>TestCountingService</code> will be injected when those
+  items are needed. This is the power of Dependency Injection and the simplicity
+  of the Parfait pattern. Simply override the items you want. Alternatively, if you
+  have a common testing configuration that you use repeatedly, you can also set up
+  a new re-useable configuration object with the values you want and make that
+  implicit in the test.
+</p>
+<p>
+  The <code>"send messages to its audit companion"</code> test shows another test
+  with a different configuration, still using the <code>_system</code> actor system
+  but this time substituting in our own <code>auditCompanionProbe</code> based on
+  an Akka TestProbe (which lets us examine the messages that were sent to it).
+</p>
+</div>
+<div>
+<h2>Advantages and Gotchas</h2>
+<p>
+  So that's Parfait in a nutshell. Some of the advantages of this approach include:
+  <ul>
+    <li>Full compile time verifiability</li>
+    <li>Full control over singleton/scoped/instance injections, use lazy val / def
+      etc. where each makes sense</li>
+    <li>Just standard Scala code, no extra libraries, macros, compiler plugins</li>
+    <li>Easy run-time reconfiguration programmatically - simply change the implicit
+      (or explicit) module passed down to children</li>
+    <li>Faster to compile than the full cake approach on large projects</li>
+    <li>Can pass configuration implicitly into methods (e.g. on objects) like we
+      see here with the <code>props</code> object methods for actor initialization.</li>
+  </ul>
+  There are some gotchas to watch out for though:
+  <ul>
+    <li>When using traits with implicit members, watch out for name clashes:
+      <pre><code>  trait Inj1 {
+    implicit def config: DbConfig
+  }
+
+  trait Inj2 {
+    implicit def config: WebServiceConfig
+  }
+
+  trait Mega extends Inj1 with Inj2   // oops</code></pre>
+  To avoid this, either avoid implicit config fields in the traits, or use
+  names that match the types:
+  <pre><code>  trait Inj1 {
+    implicit def dbConfig: DbConfig
+  }
+
+  trait Inj2 {
+    implicit def webServiceConfig: WebServiceConfig
+  }
+
+  trait Mega extends Inj1 with Inj2  // fine</code></pre>
+    </li>
+    <li>
+      Don't break the chain! Any child class that needs an implicit config type
+      injected must have that implicit (or explicit) parameter from the parent.
+      Parents can broaden the type they have injected but not narrow it.
+    </li>
+  </ul>
+</p>
+</div>
+<div>
+  <h2>Conclusion</h2>
+  <p>
+    The Parfait pattern is a useful abstraction for injecting dependencies and loosening
+    coupling between classes, concepts and modules in Scala applications without
+    sacrificing full compile-time verifiability and reasonable performance from
+    either the runtime or compile time aspects.
+  </p>
+  <p>
+    Like any Dependency Injection approach, it is not without its quirks, for example
+    care must be taken when using implicit configuration in traits in order to
+    avoid type signature clashes on members, and also relies on an unbroken chain
+    of implicits passed down from parent to child. On the other hand it provides
+    compile time safety and full type checking, decent compile-time and run-time
+    performance, a simple model and minimal boilerplate without requiring the use
+    of any third party libraries, macros or compiler plugins.
+  </p>
+</div>
+</body>

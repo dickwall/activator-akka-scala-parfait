@@ -22,8 +22,9 @@ class CountingActorSpec(_system: ActorSystem) extends TestKit(_system)
 
   "a Parfait-managed count actor" must {
     "send the correct count to its counting service" in {
-      val testConfig: SystemConfig =
-        new SystemConfig with StandardSampleModule with StandardAuditModule with AkkaConfigModule {
+      val testConfig: SystemModule =
+        new SystemModule with StandardCountingModule 
+            with StandardAuditModule with AkkaConfigModule {
           override lazy val actorSystem: ActorSystem = _system
           override lazy val countingService = new TestCountingService()(this)
         }
@@ -47,8 +48,8 @@ class CountingActorSpec(_system: ActorSystem) extends TestKit(_system)
 
     "send messages to its audit companion" in {
       val auditCompanionProbe: TestProbe = new TestProbe(_system)
-      val testConfig: SystemConfig =
-        new SystemConfig with StandardSampleModule with StandardAuditModule with AkkaConfigModule {
+      val testConfig: SystemModule =
+        new SystemModule with StandardCountingModule with StandardAuditModule with AkkaConfigModule {
           override lazy val actorSystem: ActorSystem = _system
           override lazy val auditCompanion = auditCompanionProbe.ref
         }
