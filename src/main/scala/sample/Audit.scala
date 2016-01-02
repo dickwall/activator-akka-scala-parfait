@@ -21,14 +21,14 @@ class AuditBus extends Actor {
 
 object AuditCompanion {
   val name = "AuditCompanion"
-  def props(implicit auditModule: AuditModule) = Props(new AuditCompanion)
+  def props(implicit auditBusModule: AuditBusModule) = Props(new AuditCompanion)
 }
 
 
-class AuditCompanion(implicit auditModule: AuditModule) extends Actor {
+class AuditCompanion(implicit auditBusModule: AuditBusModule) extends Actor {
   val created = System.currentTimeMillis
 
-  val auditBus = auditModule.auditBus
+  val auditBus = auditBusModule.auditBus
   def receive = {
     case msg => auditBus forward AuditBus.AuditEvent(created, msg)
   }

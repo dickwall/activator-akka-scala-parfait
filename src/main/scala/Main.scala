@@ -13,8 +13,11 @@ import scala.concurrent.duration._
 object Main extends App {
 
   implicit val config: SystemModule =
-    new SystemModule with StandardCountingModule 
-    with StandardAuditModule with AkkaConfigModule {}
+    new SystemModule
+      with StandardCountingModule
+      with StandardAuditBusModule
+      with StandardAuditCompanionModule
+      with AkkaConfigModule {}
 
   // this could be called inside a supervisor actor to create a supervisor hierarchy
   val counter = config.countingActor
