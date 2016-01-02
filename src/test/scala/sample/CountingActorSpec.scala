@@ -11,8 +11,8 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 
 class CountingActorSpec(_system: ActorSystem) extends TestKit(_system)
-    with ImplicitSender with WordSpecLike with OneInstancePerTest
-    with Matchers with BeforeAndAfterAll {
+with ImplicitSender with WordSpecLike with OneInstancePerTest
+with Matchers with BeforeAndAfterAll {
 
   def this() = this(ActorSystem("CountingActorSpec"))
 
@@ -23,8 +23,9 @@ class CountingActorSpec(_system: ActorSystem) extends TestKit(_system)
   "a Parfait-managed count actor" must {
     "send the correct count to its counting service" in {
       val testConfig: SystemModule =
-        new SystemModule with StandardCountingModule 
-            with StandardAuditModule with AkkaConfigModule {
+        new SystemModule with StandardCountingModule
+          with StandardAuditBusModule with StandardAuditCompanionModule
+          with AkkaConfigModule {
           override lazy val actorSystem: ActorSystem = _system
           override lazy val countingService = new TestCountingService()(this)
         }
@@ -49,7 +50,7 @@ class CountingActorSpec(_system: ActorSystem) extends TestKit(_system)
     "send messages to its audit companion" in {
       val auditCompanionProbe: TestProbe = new TestProbe(_system)
       val testConfig: SystemModule =
-        new SystemModule with StandardCountingModule with StandardAuditModule with AkkaConfigModule {
+        new SystemModule with StandardCountingModule with StandardAuditBusModule with StandardAuditCompanionModule with AkkaConfigModule {
           override lazy val actorSystem: ActorSystem = _system
           override lazy val auditCompanion = auditCompanionProbe.ref
         }
